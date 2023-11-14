@@ -1,0 +1,25 @@
+[package]
+name = "janus"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "janus"
+path = "src/lib.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum = "0.6.20"
+serde = { version = "1.0.192", features = ["derive"] }
+serde_json = "1.0.108"
+tokio = { version = "1.33.0", features = ["full"] }
+tower-http = { version = "0.4.4", features = ["cors"] }
+anyhow = "1.0.75"
+dotenv = "0.15.0" 
+sqlx = { version = "0.7.2", features = ["all-databases", "runtime-tokio"] }
+http = "0.2.10"
+reqwest = { version = "0.11.22", features = ["json"] }
+jsonwebtoken = "9.1.0"
+axum-test-helper = "0.3.0"
+time = "0.3.30"
