@@ -4,7 +4,7 @@ use axum::async_trait;
 use tower_http::cors::{Any, CorsLayer};
 use serde::{Serialize, Deserialize};
 use sqlx::FromRow;
-use crate::{EndpointVerb, ObjectPermission, AccessPermission, InputSerializer, CrudConfig};
+use crate::{EndpointVerb, ObjectPermission, AccessPermission, InputSerializer, CrudConfig, SchemaTrait};
 use axum::Router;
 use time::OffsetDateTime;
 use std::collections::HashMap;
@@ -135,6 +135,23 @@ impl CrudConfig for TestObject {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SchemaConfig {}
+impl SchemaTrait for SchemaConfig {
+    fn schema() -> &'static str {
+        return "
+            CREATE TABLE IF NOT EXISTS TestObjects (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(50) NOT NULL,
+                age INT NOT NULL,
+                date_created VARCHAR(50) NOT NULL,
+                status VARCHAR(50) NOT NULL,
+                user_id VARCHAR(50) NOT NULL
+            );
+        ";
+    }
+}
+
 pub async fn app_test_setup() -> Router {
     dotenv::dotenv().ok();
     
@@ -154,7 +171,7 @@ pub async fn app_test_setup() -> Router {
     
     Router::new()
         .nest("/restful", crate::create_endpoint_router::<TestObject, TestObjectInputParams, TestObjectQueryParams>())
-        .nest("/tableCommands", crate::create_tables_router())
+        .nest("/tableCommands", crate::create_tables_router::<SchemaConfig>())
         .layer(Extension(connection_pool))
         .layer(CorsLayer::new().allow_origin(Any))
 }
@@ -165,7 +182,7 @@ async fn test_customs() {
 
     let response = client.post("/tableCommands/dropTable").json(&TestObject::table_name()).send().await;
     assert_eq!(response.status(), 200);
-    let response = client.post("/tableCommands/initTables").json(&TestObject::schema()).send().await;
+    let response = client.post("/tableCommands/initTables").send().await;
     assert_eq!(response.status(), 200);
 
 

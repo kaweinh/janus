@@ -5,7 +5,7 @@ use time::OffsetDateTime;
 use tower_http::cors::{Any, CorsLayer};
 use serde::{Serialize, Deserialize};
 use sqlx::FromRow;
-use crate::{EndpointVerb, ObjectPermission, AccessPermission, InputSerializer, CrudConfig};
+use crate::{EndpointVerb, ObjectPermission, AccessPermission, InputSerializer, CrudConfig, SchemaTrait};
 use axum::Router;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -121,6 +121,23 @@ impl CrudConfig for TestObject {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SchemaConfig {}
+impl SchemaTrait for SchemaConfig {
+    fn schema() -> &'static str {
+        return "
+            CREATE TABLE IF NOT EXISTS TestObjects (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(50) NOT NULL,
+                age INT NOT NULL,
+                date_created VARCHAR(50) NOT NULL,
+                status VARCHAR(50) NOT NULL,
+                user_id VARCHAR(50) NOT NULL
+            );
+        ";
+    }
+}
+
 pub async fn app_test_setup() -> Router {
     dotenv::dotenv().ok();
     
@@ -140,10 +157,11 @@ pub async fn app_test_setup() -> Router {
     
     Router::new()
         .nest("/restful", crate::create_endpoint_router::<TestObject, TestObjectInputParams, TestObjectQueryParams>())
-        .nest("/tableCommands", crate::create_tables_router())
+        .nest("/tableCommands", crate::create_tables_router::<SchemaConfig>())
         .layer(Extension(connection_pool))
         .layer(CorsLayer::new().allow_origin(Any))
 }
+
 
 #[tokio::test]
 async fn test_post_auth() {
@@ -152,7 +170,7 @@ async fn test_post_auth() {
 
     let response = client.post("/tableCommands/dropTable").json(&TestObject::table_name()).send().await;
     assert_eq!(response.status(), 200);
-    let response = client.post("/tableCommands/initTables").json(&TestObject::schema()).send().await;
+    let response = client.post("/tableCommands/initTables").send().await;
     assert_eq!(response.status(), 200);
 
     let response = client.post("/restful/testObjects").json(&TestObjectInputParams { name: "John Doe".to_string(), age: 30 }).send().await;
@@ -181,7 +199,7 @@ async fn test_put_auth() {
 
     let response = client.post("/tableCommands/dropTable").json(&TestObject::table_name()).send().await;
     assert_eq!(response.status(), 200);
-    let response = client.post("/tableCommands/initTables").json(&TestObject::schema()).send().await;
+    let response = client.post("/tableCommands/initTables").send().await;
     assert_eq!(response.status(), 200);
 
     let bearer_token = format!("Bearer {}", token);
@@ -217,7 +235,7 @@ async fn test_delete_admin() {
 
     let response = client.post("/tableCommands/dropTable").json(&TestObject::table_name()).send().await;
     assert_eq!(response.status(), 200);
-    let response = client.post("/tableCommands/initTables").json(&TestObject::schema()).send().await;
+    let response = client.post("/tableCommands/initTables").send().await;
     assert_eq!(response.status(), 200);
 
     let bearer_token = format!("Bearer {}", token);
@@ -252,7 +270,7 @@ async fn test_user_objects_private() {
 
     let response = client.post("/tableCommands/dropTable").json(&TestObject::table_name()).send().await;
     assert_eq!(response.status(), 200);
-    let response = client.post("/tableCommands/initTables").json(&TestObject::schema()).send().await;
+    let response = client.post("/tableCommands/initTables").send().await;
     assert_eq!(response.status(), 200);
 
     let bearer_token_gmail = format!("Bearer {}", token_gmail);

@@ -3,11 +3,8 @@ use serde_json::Value;
 use serde::Serialize;
 use sqlx::{Row, FromRow, Result, postgres::{ PgRow, PgPool }};
 use std::{collections::HashMap, fmt::Debug};
-use crate::InputSerializer;
-use crate::CrudConfig;
-use crate::extractors::{ AuthUser, AdminUser };
-use crate::EndpointVerb;
-use crate::ObjectPermission;
+use crate::{ InputSerializer, CrudConfig, EndpointVerb, ObjectPermission, SchemaTrait };
+use crate::extractors::{ AuthUser, AdminUser }; 
 
 fn convert_to_hashmap<T>( object: &T ) -> HashMap<String, Value> where T: Serialize {
     let json_string = serde_json::to_string(&object).unwrap();
@@ -15,11 +12,10 @@ fn convert_to_hashmap<T>( object: &T ) -> HashMap<String, Value> where T: Serial
     return map
 }
 
-pub async fn init_tables ( 
-    Extension( connection_pool ): Extension<PgPool>, 
-    Json( schema ): Json<String> ) -> Result<(), StatusCode> {
+pub async fn init_tables<S: SchemaTrait> ( 
+    Extension( connection_pool ): Extension<PgPool> ) -> Result<(), StatusCode> {
 
-    sqlx::query( schema.as_str() )
+    sqlx::query( S::schema() )
         .execute( &connection_pool ).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR )?;
     Ok(())
@@ -35,9 +31,8 @@ pub async fn drop_table (
     Ok(())
 }
 
-pub async fn reset_tables ( 
-    Extension( connection_pool ): Extension<PgPool>, 
-    Json( schema ): Json<String> ) -> Result<(), StatusCode> {
+pub async fn reset_tables<S: SchemaTrait> ( 
+    Extension( connection_pool ): Extension<PgPool> ) -> Result<(), StatusCode> {
 
     sqlx::query( "DROP SCHEMA public CASCADE;" )
         .execute( &connection_pool ).await
@@ -47,7 +42,7 @@ pub async fn reset_tables (
         .execute( &connection_pool ).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR )?;  
 
-    sqlx::query( schema.as_str() )
+    sqlx::query( S::schema() )
         .execute( &connection_pool ).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR )?;
     Ok(())
