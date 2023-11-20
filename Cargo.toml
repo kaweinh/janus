@@ -17,9 +17,11 @@ tokio = { version = "1.33.0", features = ["full"] }
 tower-http = { version = "0.4.4", features = ["cors"] }
 anyhow = "1.0.75"
 dotenv = "0.15.0" 
-sqlx = { version = "0.7.2", features = ["all-databases", "runtime-tokio"] }
-http = "0.2.10"
+sqlx = { version = "0.7.2", features = ["all-databases", "runtime-tokio", "uuid", "chrono"] }
 reqwest = { version = "0.11.22", features = ["json"] }
 jsonwebtoken = "9.1.0"
 axum-test-helper = "0.3.0"
 time = "0.3.30"
+uuid = { version = "1.5.0", features = ["v4", "serde"] }
+chrono = { version = "0.4.31", features = ["serde"] }
+http = "1.0.0"

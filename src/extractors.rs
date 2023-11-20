@@ -3,7 +3,7 @@ use axum::{
     extract::FromRequestParts,
     http::StatusCode
 };
-use http::request::Parts;
+use axum::http::request::Parts;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation, TokenData};
 use reqwest;
 use serde::Deserialize;

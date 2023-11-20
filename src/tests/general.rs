@@ -4,17 +4,16 @@ use axum::async_trait;
 use tower_http::cors::{Any, CorsLayer};
 use serde::{Serialize, Deserialize};
 use sqlx::FromRow;
-use crate::{EndpointVerb, ObjectPermission, AccessPermission, InputSerializer, CrudConfig, SchemaTrait};
+use crate::{EndpointVerb, ObjectPermission, AccessPermission, InputSerializer, CrudConfig, SchemaTrait, KeyValue, FieldValue};
 use axum::Router;
-use time::OffsetDateTime;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 struct TestObject {
-    id: i32,
+    id: uuid::Uuid,
     name: String,
     age: i32,
-    date_created: String,
+    date_created: chrono::DateTime<chrono::Utc>,
     status: String,
     user_id: String
 }
@@ -27,7 +26,7 @@ struct TestObjectInputParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TestObjectQueryParams {
-    id: Option<i32>,
+    id: Option<uuid::Uuid>,
     name: Option<String>,
     age: Option<i32>,
     age_gt: Option<i32>,
@@ -35,8 +34,8 @@ struct TestObjectQueryParams {
     age_ge: Option<i32>,
     age_le: Option<i32>,
     status: Option<String>,
-    date_created_gt: Option<String>,
-    date_created_lt: Option<String>,
+    date_created_gt: Option<chrono::DateTime<chrono::Utc>>,
+    date_created_lt: Option<chrono::DateTime<chrono::Utc>>,
     order_by: Option<String>,
     order_dir: Option<String>
 }
@@ -51,7 +50,91 @@ impl InputSerializer<TestObject> for TestObjectInputParams {
     }
 
     fn add_set_values(&self, user_id: Option<String>) -> TestObject {
-        return TestObject { id: 0, name: self.name.clone(), age: self.age, date_created: OffsetDateTime::now_utc().format( &time::format_description::well_known::Iso8601::DEFAULT ).unwrap().as_str()[0..19].to_string(), status: "active".to_string(), user_id: match user_id { Some(id) => id, None => "nobody".to_string() } };
+        return TestObject { 
+            id: uuid::Uuid::new_v4(), 
+            name: self.name.clone(), 
+            age: self.age, 
+            date_created: chrono::Utc::now(), 
+            status: "active".to_string(), 
+            user_id: match user_id { Some(id) => id, None => "nobody".to_string() } };
+    }
+}
+
+impl KeyValue for TestObject {
+    fn key_value_pairs<'a>(&'a self) -> Vec<(&'static str, FieldValue<'a>)> {
+        vec![
+            ("id", FieldValue::UUID( &self.id )),
+            ("name", FieldValue::STRING( &self.name )),
+            ("age", FieldValue::INTEGER( &self.age )),
+            ("date_created", FieldValue::DATE( &self.date_created )),
+            ("status", FieldValue::STRING( &self.status )),
+            ("user_id", FieldValue::STRING( &self.user_id ))
+        ]
+    }
+}
+
+impl KeyValue for TestObjectInputParams {
+    fn key_value_pairs<'a>(&'a self) -> Vec<(&'static str, FieldValue<'a>)> {
+        vec![
+            ("name", FieldValue::STRING( &self.name )),
+            ("age", FieldValue::INTEGER( &self.age ))
+        ]
+    }
+}
+
+impl KeyValue for TestObjectQueryParams {
+    fn key_value_pairs<'a>(&'a self) -> Vec<(&'static str, FieldValue<'a>)> {
+        let mut pairs = vec![];
+
+        if let Some(id) = &self.id {
+            pairs.push( ("id", FieldValue::UUID( id )) );
+        }
+
+        if let Some(name) = &self.name {
+            pairs.push( ("name", FieldValue::STRING( name )) );
+        }
+
+        if let Some(age) = &self.age {
+            pairs.push( ("age", FieldValue::INTEGER( age )) );
+        }
+
+        if let Some(age_gt) = &self.age_gt {
+            pairs.push( ("age_gt", FieldValue::INTEGER( age_gt )) );
+        }
+
+        if let Some(age_lt) = &self.age_lt {
+            pairs.push( ("age_lt", FieldValue::INTEGER( age_lt )) );
+        }
+
+        if let Some(age_ge) = &self.age_ge {
+            pairs.push( ("age_ge", FieldValue::INTEGER( age_ge )) );
+        }
+
+        if let Some(age_le) = &self.age_le {
+            pairs.push( ("age_le", FieldValue::INTEGER( age_le )) );
+        }
+
+        if let Some(status) = &self.status {
+            pairs.push( ("status", FieldValue::STRING( status )) );
+        }
+
+        if let Some(date_created_gt) = &self.date_created_gt {
+            pairs.push( ("date_created_gt", FieldValue::DATE( date_created_gt )) );
+        }
+
+        if let Some(date_created_lt) = &self.date_created_lt {
+            pairs.push( ("date_created_lt", FieldValue::DATE( date_created_lt )) );
+        }
+
+        if let Some(order_by) = &self.order_by {
+            pairs.push( ("order_by", FieldValue::STRING( order_by )) );
+        }
+
+        if let Some(order_dir) = &self.order_dir {
+            pairs.push( ("order_dir", FieldValue::STRING( order_dir )) );
+        }
+
+        return pairs;
     }
 }
 
@@ -68,10 +151,10 @@ impl CrudConfig for TestObject {
     fn schema() -> &'static str {
         return "
             CREATE TABLE IF NOT EXISTS TestObjects (
-                id SERIAL PRIMARY KEY,
+                id UUID PRIMARY KEY,
                 name VARCHAR(50) NOT NULL,
                 age INT NOT NULL,
-                date_created VARCHAR(50) NOT NULL,
+                date_created TIMESTAMPTZ NOT NULL,
                 status VARCHAR(50) NOT NULL,
                 user_id VARCHAR(50) NOT NULL
             );
@@ -118,17 +201,17 @@ impl CrudConfig for TestObject {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SchemaConfig {}
 impl SchemaTrait for SchemaConfig {
-    fn schema() -> &'static str {
+    fn schema() -> String {
         return "
             CREATE TABLE IF NOT EXISTS TestObjects (
-                id SERIAL PRIMARY KEY,
+                id UUID PRIMARY KEY,
                 name VARCHAR(50) NOT NULL,
                 age INT NOT NULL,
-                date_created VARCHAR(50) NOT NULL,
+                date_created TIMESTAMPTZ NOT NULL,
                 status VARCHAR(50) NOT NULL,
                 user_id VARCHAR(50) NOT NULL
             );
-        ";
+        ".to_string();
     }
 }
 
@@ -232,7 +315,7 @@ async fn test_put_any() {
     let response = client.post("/restful/testObjects").json(&TestObjectInputParams { name: "John".to_string(), age: 30 }).send().await;
     assert_eq!(response.status(), 200);
     
-    let id = response.json::<i32>().await;
+    let id = response.json::<uuid::Uuid>().await;
 
     let response = client.put(&format!("/restful/testObjects/{}", id.to_string() )).json(&TestObjectInputParams { name: "John".to_string(), age: 29 }).send().await;
     assert_eq!(response.status(), 200);
@@ -259,7 +342,7 @@ async fn test_delete_any() {
     let response = client.post("/restful/testObjects").json(&TestObjectInputParams { name: "John".to_string(), age: 30 }).send().await;
     assert_eq!(response.status(), 200);
     
-    let id = response.json::<i32>().await;
+    let id = response.json::<uuid::Uuid>().await;
     let response = client.get(&format!("/restful/testObjects?id={}", id.to_string() )).send().await;
     assert_eq!(response.status(), 200);
 
@@ -317,13 +400,13 @@ async fn test_datetime() {
     assert_eq!(response.status(), 200);
 
 
-    let response = client.get( &format!("/restful/testObjects?date_created_gt=2023-11-12T00:00:00&date_created_lt=2023-11-15T00:00:00")).send().await;
+    let response = client.get( &format!("/restful/testObjects?date_created_gt=2023-11-15T03:09:35.682706Z&date_created_lt=2023-12-18T03:09:35.682706Z")).send().await;
     assert_eq!(response.status(), 200);
 
     let objects: Vec<TestObject> = response.json().await;
     assert!( !objects.is_empty() );
 
-    let response = client.get( &format!("/restful/testObjects?date_created_gt=2023-11-16T00:00:00&date_created_lt=2023-11-18T00:00:00")).send().await;
+    let response = client.get( &format!("/restful/testObjects?date_created_gt=2023-11-13T03:09:35.682706Z&date_created_lt=2023-11-14T03:09:35.682706Z")).send().await;
     assert_eq!(response.status(), 200);
 
     let objects: Vec<TestObject> = response.json().await;

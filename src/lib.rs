@@ -2,9 +2,7 @@ use std::fmt::Debug;
 use axum::Router;
 use serde::{Serialize, Deserialize};
 use sqlx::{FromRow, postgres::{PgRow, PgConnectOptions, PgPool}};
-use http::StatusCode;
-use std::collections::HashMap;
-use serde_json::Value;
+use axum::http::StatusCode;
 use axum::async_trait;
 use axum::Json;
 
@@ -20,6 +18,15 @@ pub enum EndpointVerb {
     PUT,
     DELETE
 } 
+
+pub enum FieldValue<'a> {
+    UUID(&'a uuid::Uuid),
+    STRING(&'a String),
+    INTEGER(&'a i32),
+    DATE(&'a chrono::DateTime<chrono::Utc>),
+    BOOLEAN(&'a bool),
+    FLOAT(&'a f64)
+}
 
 pub enum ObjectPermission {
     ALL,
@@ -37,6 +44,10 @@ pub trait InputSerializer<T: CrudConfig + Serialize > {
     fn add_set_values(&self, user_id: Option<String>) -> T;
 }
 
+pub trait KeyValue {
+    fn key_value_pairs<'a>(&'a self) -> Vec<(&'static str, FieldValue<'a>)>;
+}
+
 #[async_trait]
 pub trait CrudConfig {
     fn table_name() -> &'static str;
@@ -49,31 +60,32 @@ pub trait CrudConfig {
     fn get_access_permissions( verb: &EndpointVerb ) -> AccessPermission;
 
     #[allow(unused_variables)]
-    async fn custom_create( connection_pool: &PgPool, table_name: &str, values: &HashMap<String, Value> ) -> Result<Json<i32>, StatusCode> { 
+    async fn custom_create<T>( connection_pool: &PgPool, values: T ) -> Result<Json<uuid::Uuid>, StatusCode> where T : Send + Sync + Unpin + KeyValue { 
         Err( StatusCode::NOT_IMPLEMENTED ) 
     } 
 
     #[allow(unused_variables)]
-    async fn custom_read<T>( connection_pool: &PgPool, table_name: &str, filters: &HashMap<String, Value>, user_id: Option<String> ) -> Result<Json<Vec<T>>, StatusCode> where T: for<'r> FromRow<'r, PgRow> + Send + Unpin {
+    async fn custom_read<T, QP>( connection_pool: &PgPool, filters: QP, user_id: Option<String> ) 
+        -> Result<Json<Vec<T>>, StatusCode> where T: for<'r> FromRow<'r, PgRow> + Send + Unpin, QP: Send + Sync + Unpin + KeyValue {
         Err( StatusCode::NOT_IMPLEMENTED )
     }
 
     #[allow(unused_variables)]
-    async fn custom_update( connection_pool: &PgPool, table_name: &str, id: i32, values: &HashMap<String, Value>, user_id: Option<String> ) -> StatusCode {
+    async fn custom_update<UP>( connection_pool: &PgPool, id: uuid::Uuid, values: UP, user_id: Option<String> ) -> StatusCode where UP: Send + Sync + Unpin + KeyValue {
         StatusCode::NOT_IMPLEMENTED
     }
 
     #[allow(unused_variables)]
-    async fn custom_delete( connection_pool: &PgPool, table_name: &str, ids: &Vec<i32>, user_id: Option<String> ) -> StatusCode {
+    async fn custom_delete( connection_pool: &PgPool, ids: Vec<uuid::Uuid>, user_id: Option<String> ) -> StatusCode {
         StatusCode::NOT_IMPLEMENTED
     }
 }
 
 
 pub fn create_endpoint_router<T, UP, QP>() -> Router where 
-        T: for<'r> FromRow<'r, PgRow> + Send + Sync + 'static + Unpin + CrudConfig + Serialize, 
-        UP: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static + InputSerializer<T>, 
-        QP: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static + Debug {
+        T: for<'r> FromRow<'r, PgRow> + Send + Sync + 'static + Unpin + CrudConfig + Serialize + KeyValue, 
+        UP: Serialize + for<'de> Deserialize<'de> + Send + Sync + Unpin + 'static + InputSerializer<T> + KeyValue, 
+        QP: Serialize + for<'de> Deserialize<'de> + Send + Sync + Unpin + 'static + Debug + KeyValue {
     let mut router = Router::new();
 
     for verb in vec![ EndpointVerb::GET, EndpointVerb::POST, EndpointVerb::PUT, EndpointVerb::DELETE ] {
@@ -115,7 +127,7 @@ pub fn create_endpoint_router<T, UP, QP>() -> Router where
 }
 
 pub trait SchemaTrait {
-    fn schema() -> &'static str;
+    fn schema() -> String;
 }
 
 pub fn create_tables_router<S>() -> Router where S: SchemaTrait + Send + Sync + 'static + Unpin + Serialize {
