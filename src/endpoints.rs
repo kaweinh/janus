@@ -3,10 +3,25 @@ use serde::Serialize;
 use sqlx::{Row, FromRow, Result, postgres::{ PgRow, PgPool }};
 use std::fmt::Debug;
 use crate::{ InputSerializer, CrudConfig, EndpointVerb, ObjectPermission, SchemaTrait, KeyValue, FieldValue };
-use crate::extractors::{ AuthUser, AdminUser }; 
+use crate::extractors::{ AuthUser, AdminUser };
+use serde::Deserialize;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResetTableInput {
+    pub table_name: String,
+    pub password: String
+}
 
 pub async fn init_tables<S: SchemaTrait> ( 
-    Extension( connection_pool ): Extension<PgPool> ) -> Result<(), StatusCode> {
+    Extension( connection_pool ): Extension<PgPool>, 
+    Json(input_password): Json<String> ) -> Result<(), StatusCode> {
+
+    dotenv::dotenv().ok();
+    let password = std::env::var("ADMIN_PASSWORD").unwrap();
+
+    if password != input_password {
+        return Err( StatusCode::UNAUTHORIZED );
+    }
 
     sqlx::Executor::execute( &connection_pool, S::schema().as_str() )
         .await
@@ -17,21 +32,40 @@ pub async fn init_tables<S: SchemaTrait> (
     Ok(())
 }
 
-pub async fn drop_table ( 
+pub async fn reset_table<S: SchemaTrait> ( 
     Extension( connection_pool ): Extension<PgPool>, 
-    Json( table_name ): Json<String> ) -> Result<(), StatusCode> {
+    Json( input ): Json<ResetTableInput> ) -> Result<(), StatusCode> {
 
-    sqlx::query( &format!("DROP TABLE IF EXISTS {} ", table_name )  )
+    dotenv::dotenv().ok();
+    let password = std::env::var("ADMIN_PASSWORD").unwrap();
+
+    if password != input.password {
+        return Err( StatusCode::UNAUTHORIZED );
+    }
+
+    sqlx::query( &format!("DROP TABLE IF EXISTS {} ", input.table_name )  )
         .execute( &connection_pool ).await
         .map_err(|error| {
             println!("{:?}", error);
             StatusCode::INTERNAL_SERVER_ERROR 
         })?;
+
+    sqlx::Executor::execute( &connection_pool, S::schema().as_str() )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR )?;
     Ok(())
 }
 
 pub async fn reset_tables<S: SchemaTrait> ( 
-    Extension( connection_pool ): Extension<PgPool> ) -> Result<(), StatusCode> {
+    Extension( connection_pool ): Extension<PgPool>,
+    Json( input_password): Json<String> ) -> Result<(), StatusCode> {
+
+    dotenv::dotenv().ok();
+    let password = std::env::var("ADMIN_PASSWORD").unwrap();
+
+    if password != input_password {
+        return Err( StatusCode::UNAUTHORIZED );
+    }
 
     sqlx::query( "DROP SCHEMA public CASCADE;" )
         .execute( &connection_pool ).await

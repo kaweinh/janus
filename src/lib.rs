@@ -136,7 +136,7 @@ pub fn create_tables_router<S>() -> Router where S: SchemaTrait + Send + Sync + 
     router = router
                 .route( "/initTables", axum::routing::post( endpoints::init_tables::<S> ) )
                 .route( "/resetTables", axum::routing::post( endpoints::reset_tables::<S> ) )
-                .route( "/dropTable", axum::routing::post( endpoints::drop_table ) );
+                .route( "/resetTable", axum::routing::post( endpoints::reset_table::<S> ) );
 
     return router;
 }
